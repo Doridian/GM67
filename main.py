@@ -107,13 +107,18 @@ class GM67:
         except TimeoutError:
             return None
 
-    def scan(self, duration_seconds: float = 4) -> GM67ScannedBarcode | None:
+    # Set duration_seconds to 0 to use "passive" scanning, where the user triggers the scan
+    # with the onboard button
+    def scan(self, duration_seconds: float = 4.0) -> GM67ScannedBarcode | None:
         self.wake()
-        self.set_scanning_duration(int(duration_seconds * 10))
-        self.set_scanner_active(True)
 
         orig_timeout = self.port.timeout
-        self.port.timeout = duration_seconds + 0.1
+
+        if duration_seconds > 0:
+            self.set_scanning_duration(int(duration_seconds * 10))
+            self.set_scanner_active(True)
+            self.port.timeout = duration_seconds + 0.1
+
         try:
             data = self.poll()
         finally:
