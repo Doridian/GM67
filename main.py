@@ -4,6 +4,7 @@ from sys import argv
 from time import sleep
 from enum import Enum
 from binascii import hexlify
+from dataclasses import dataclass
 
 class GM67TriggerMode(Enum):
     BUTTON_HOLDING = b"\x00"
@@ -28,6 +29,57 @@ NACK_TO_DEVICE_RESEND = b"\xd1\x04\x00"
 
 MULTIBYTE_OPCODES = {0xF4}
 
+SCANNED_CODE_OPCODES = {0xF3, 0xF4}
+
+
+class GM67BarcodeType(Enum):
+    CODE_39 = 0x01
+    CODEBAR = 0x02
+    CODE_128 = 0x03
+    DISCERE_2_OF_5 = 0x04
+    IATA_2_OF_5 = 0x05
+    INTERLEAVED_2_OF_5 = 0x06
+    CODE_93 = 0x07
+    UPC_A = 0x08
+    UPC_A_ADDON_2 = 0x48
+    UPC_A_ADDON_5 = 0x88
+    UPC_E0 = 0x09
+    UPC_E0_ADDON_2 = 0x49
+    UPC_E0_ADDON_5 = 0x89
+    EAN_8 = 0x0A
+    EAN_8_ADDON_2 = 0x4A
+    EAN_8_ADDON_5 = 0x8A
+    EAN_13 = 0x0B
+    EAN_13_ADDON_2 = 0x4B
+    EAN_13_ADDON_5 = 0x8B
+    CODE11 = 0x0C
+    MSI = 0x0E
+    GS1_128 = 0x0F
+    UPC_E1 = 0x10
+    UPC_E1_ADDON_2 = 0x50
+    UPC_E1_ADDON_5 = 0x90
+    TRIOPTIC_CODE_39 = 0x15
+    BOOKLAND_EAN = 0x16
+    COUPON_CODE = 0x17
+    GS1_DATABAR_14 = 0x30
+    GS1_DATABAR_LIMITED = 0x31
+    GS1_DATABAR_EXPANDED = 0x32
+    PDF417 = 0xF0
+    QR = 0xF1
+    DATA_MATRIX = 0xF2
+    AZTEC_CODE = 0xF3
+    MAXI_CODE = 0xF4
+    VERI_CODE = 0xF5
+    HAN_XIN = 0xF7
+    AIM128 = 0xA2
+    ISSN = 0xA3
+    PLESSEY = 0xA4
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class GM67ScannedBarcode:
+    barcode_type: GM67BarcodeType
+    data: bytes
+
 class GM67:
     port: Serial
 
@@ -47,11 +99,13 @@ class GM67:
             raise TimeoutError("Timeout reading %d bytes" % length)
         return res
     
-    def poll(self) -> bytes | None:
+    def poll(self) -> GM67ScannedBarcode | None:
         try:
             data = self.read()
             self.send_command(ACK_TO_DEVICE, expect_ack=False)
-            return data
+            if data[0] in SCANNED_CODE_OPCODES:
+                return GM67ScannedBarcode(barcode_type=GM67BarcodeType(data[3]), data=data[4:])
+            return None
         except TimeoutError:
             return None
 
@@ -131,7 +185,7 @@ def main():
     while True:
         d = gm.poll()
         if d:
-            print(hexlify(d))
+            print(d)
 
 if __name__ == '__main__':
     main()
