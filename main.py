@@ -12,9 +12,21 @@ class GM67TriggerMode(Enum):
     AUTOMATIC_INDUCTION = b"\x09"
     HOST = b"\x08"
 
+class GM67DataFormat(Enum):
+    CODE = b"\x00"
+    CODE_SUFFIX1 = b"\x01"
+    CODE_SUFFIX2 = b"\x02"
+    CODE_SUFFIX1_SUFFIX2 = b"\x03"
+    PREFIX_CODE = b"\x04"
+    PREFIX_CODE_SUFFIX1 = b"\x05"
+    PREFIX_CODE_SUFFIX2 = b"\x06"
+    PREFIX_CODE_SUFFIX1_SUFFIX2 = b"\x07"
+
 ACK_FROM_DEVICE = b"\xd0\x00\x00"
 ACK_TO_DEVICE = b"\xd0\x04\x00"
 NACK_TO_DEVICE_RESEND = b"\xd1\x04\x00"
+
+MULTIBYTE_OPCODES = {0xF4}
 
 class GM67:
     port: Serial
@@ -49,20 +61,19 @@ class GM67:
         # n bytes: data
         # 2 bytes: checksum
 
-        pktlenb = self._ensure_read(1)
-        pktdata_raw = pktlenb
-        pktlen = pktlenb[0]
-        if pktlen == 0xFF:
-            opcode_dummy = self._ensure_read(1)
-            pktdata_raw += opcode_dummy
-            pktlenb = self._ensure_read(2) # 2-byte length
-            pktdata_raw += pktlenb
-            pktdata = self._ensure_read(int.from_bytes(pktlenb, "big") - 2)
-            if pktdata[0] != opcode_dummy[0]:
-                raise ValueError("Unexpected opcode mismatch in multi-byte length packet: First=%02x / Second=%02x" % (opcode_dummy[0], pktdata[0]))
+        pkthdrtmp = self._ensure_read(2)
+        pktdata_raw = pkthdrtmp
+        pktlen = pkthdrtmp[0]
+        opcode = pkthdrtmp[1]
+        if pktlen == 0xFF and opcode in MULTIBYTE_OPCODES:
+            pkthdrtmp = self._ensure_read(3) # 2-byte length
+            if pkthdrtmp[2] != opcode:
+                raise ValueError("Unexpected opcode mismatch in multi-byte length packet: First=%02x / Second=%02x" % (opcode, pktdata[0]))
+            pktdata_raw += pkthdrtmp
+            pktdata = self._ensure_read(int.from_bytes(pkthdrtmp[:2], "big") - 3)
         else:
-            pktdata = self._ensure_read(pktlen + 1)
-        
+            pktdata = self._ensure_read(pktlen)
+
         pktcsum = (pktdata[-2] << 8) | pktdata[-1]
         pktdata = pktdata[:-2]
         pktdata_raw += pktdata
@@ -70,7 +81,7 @@ class GM67:
         if pktcsum != GM67.compute_checksum(pktdata_raw):
             raise ValueError("Checksum mismatch: Computed=%04x / Packet=%04x" % (GM67.compute_checksum(pktdata), pktcsum))
 
-        return pktdata
+        return bytes([opcode]) + pktdata
 
     def asset_ack(self) -> None:
         data = self.read()
@@ -87,6 +98,9 @@ class GM67:
         self.port.write(command)
         if expect_ack:
             self.asset_ack()
+
+    def set_data_send_format(self, format: GM67DataFormat) -> None:
+        self.send_command(b"\xC6\x04\x08\x00\xEB" + format.value)
 
     def set_trigger_mode(self, mode: GM67TriggerMode) -> None:
         self.send_command(b"\xC6\x04\x08\x00\x8A" + mode.value)
@@ -107,6 +121,7 @@ def main():
     gm.wake()
     gm.set_trigger_mode(GM67TriggerMode.HOST)
     gm.set_packetize_data(True)
+    gm.set_data_send_format(GM67DataFormat.CODE)
 
     sleep(1)
 
@@ -114,7 +129,9 @@ def main():
     gm.set_scan_enable(True)
     gm.set_scanner_active(True)
     while True:
-        print(hexlify(gm.poll()))
+        d = gm.poll()
+        if d:
+            print(hexlify(d))
 
 if __name__ == '__main__':
     main()
