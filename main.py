@@ -99,15 +99,33 @@ class GM67:
             raise TimeoutError("Timeout reading %d bytes" % length)
         return res
     
-    def poll(self) -> GM67ScannedBarcode | None:
+    def poll(self) -> bytes | None:
         try:
-            data = self.read()
+            res = self.read()
             self.send_command(ACK_TO_DEVICE, expect_ack=False)
-            if data[0] in SCANNED_CODE_OPCODES:
-                return GM67ScannedBarcode(barcode_type=GM67BarcodeType(data[3]), data=data[4:])
-            return None
+            return res
         except TimeoutError:
             return None
+
+    def scan(self, duration_seconds: float = 4) -> GM67ScannedBarcode | None:
+        self.wake()
+        self.set_scanning_duration(int(duration_seconds * 10))
+        self.set_scanner_active(True)
+
+        orig_timeout = self.port.timeout
+        self.port.timeout = duration_seconds + 0.1
+        try:
+            data = self.poll()
+        finally:
+            self.port.timeout = orig_timeout
+
+        if not data:
+            return None
+
+        if data[0] in SCANNED_CODE_OPCODES:
+            return GM67ScannedBarcode(barcode_type=GM67BarcodeType(data[3]), data=data[4:])
+
+        raise ValueError(f"Unexpected data: {hexlify(data)}")
 
     def read(self) -> bytes:
         # Packet structure:
@@ -153,6 +171,9 @@ class GM67:
         if expect_ack:
             self.asset_ack()
 
+    def set_scanning_duration(self, tenths_seconds: int) -> None:
+        self.send_command(b"\xC6\x04\x08\x00\x88" + tenths_seconds.to_bytes(1, "big"))
+
     def set_data_send_format(self, format: GM67DataFormat) -> None:
         self.send_command(b"\xC6\x04\x08\x00\xEB" + format.value)
 
@@ -176,14 +197,13 @@ def main():
     gm.set_trigger_mode(GM67TriggerMode.HOST)
     gm.set_packetize_data(True)
     gm.set_data_send_format(GM67DataFormat.CODE)
+    gm.set_scan_enable(True)
 
     sleep(1)
 
-    gm.wake()
-    gm.set_scan_enable(True)
-    gm.set_scanner_active(True)
     while True:
-        d = gm.poll()
+        print("Scanning...")
+        d = gm.scan()
         if d:
             print(d)
 
