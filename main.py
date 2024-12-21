@@ -80,31 +80,31 @@ class GM67ScannedBarcode:
     barcode_type: GM67BarcodeType
     data: bytes
 
-class GM67ChecksummedReader:
+class GM67:
     port: Serial
-    checksum_state: int
+    _checksum_state: int
 
     def __init__(self, port: Serial):
         self.port = port
-        self.checksum_state = 0
+        self._checksum_state = 0
 
-    def read(self, length: int, /, checksum: bool = True) -> bytes:
+    def _checksum_start(self):
+        self._checksum_state = 0
+
+    def _checksum_end(self) -> int:
+        return self._checksum_state & 0xFFFF
+
+    def _checksum_read(self, length: int) -> bytes:
+        res = self._port_read(length)
+        for b in res:
+            self._checksum_state -= b
+        return res
+
+    def _port_read(self, length: int) -> bytes:
         res = self.port.read(length)
         if len(res) != length:
             raise TimeoutError("Timeout reading %d bytes" % length)
-        if checksum:
-            for b in res:
-                self.checksum_state -= b
         return res
-
-    def checksum(self) -> int:
-        return self.checksum_state & 0xFFFF
-
-class GM67:
-    port: Serial
-
-    def __init__(self, port: Serial):
-        self.port = port
 
     @staticmethod
     def compute_checksum(data: bytes) -> int:
@@ -153,23 +153,23 @@ class GM67:
         # n bytes: data
         # 2 bytes: checksum
 
-        reader = GM67ChecksummedReader(self.port)
+        self._checksum_start()
 
-        pkttmp = reader.read(2)
+        pkttmp = self._checksum_read(2)
         pktlen = pkttmp[0]
         opcode = pkttmp[1]
         if pktlen == 0xFF and opcode in MULTIBYTE_OPCODES:
-            pkttmp = reader.read(3) # 2-byte length
+            pkttmp = self._checksum_read(3) # 2-byte length
             if pkttmp[2] != opcode:
                 raise ValueError("Unexpected opcode mismatch in multi-byte length packet: First=%02x / Second=%02x" % (opcode, pktdata[0]))
-            pktdata = reader.read(int.from_bytes(pkttmp[:2], "big") - 5)
+            pktdata = self._checksum_read(int.from_bytes(pkttmp[:2], "big") - 5)
         else:
-            pktdata = reader.read(pktlen - 2)
+            pktdata = self._checksum_read(pktlen - 2)
 
-        pkttmp = reader.read(2, checksum=False)
+        pkttmp = self._port_read(2) # This is the checksum, don't checksum it...
         pktcsum = (pkttmp[-2] << 8) | pkttmp[-1]
 
-        computed_csum = reader.checksum()
+        computed_csum = self._checksum_end()
         if pktcsum != computed_csum:
             raise ValueError("Checksum mismatch: Computed=%04x / Packet=%04x" % (computed_csum, pktcsum))
 
