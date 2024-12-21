@@ -88,10 +88,10 @@ class GM67:
 
     @staticmethod
     def compute_checksum(data: bytes) -> int:
-        s = 0
+        csum = 0
         for b in data:
-            s += b
-        return 0x10000 - (s & 0xFFFF)
+            csum -= b
+        return csum & 0xFFFF
     
     def _ensure_read(self, length: int) -> bytes:
         res = self.port.read(length)
