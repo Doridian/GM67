@@ -95,15 +95,11 @@ class GM67:
         return self._checksum_state & 0xFFFF
 
     def _checksum_read(self, length: int) -> bytes:
-        res = self._port_read(length)
-        for b in res:
-            self._checksum_state -= b
-        return res
-
-    def _port_read(self, length: int) -> bytes:
         res = self.port.read(length)
         if len(res) != length:
             raise TimeoutError("Timeout reading %d bytes" % length)
+        for b in res:
+            self._checksum_state -= b
         return res
 
     @staticmethod
@@ -166,10 +162,12 @@ class GM67:
         else:
             pktdata = self._checksum_read(pktlen - 2)
 
-        pkttmp = self._port_read(2) # This is the checksum, don't checksum it...
+        # Grab checksum before we add the checksum to the checksum etc
+        computed_csum = self._checksum_end()
+
+        pkttmp = self._checksum_read(2)
         pktcsum = (pkttmp[-2] << 8) | pkttmp[-1]
 
-        computed_csum = self._checksum_end()
         if pktcsum != computed_csum:
             raise ValueError("Checksum mismatch: Computed=%04x / Packet=%04x" % (computed_csum, pktcsum))
 
