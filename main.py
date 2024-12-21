@@ -116,7 +116,7 @@ class GM67:
         orig_timeout = self.port.timeout
 
         if duration_seconds > 0:
-            self.set_scanning_duration(int(duration_seconds * 10))
+            self.set_scanning_duration(int(duration_seconds * 10.0))
             self.set_scanner_active(True)
             self.port.timeout = duration_seconds + 0.1
 
