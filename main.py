@@ -80,6 +80,26 @@ class GM67ScannedBarcode:
     barcode_type: GM67BarcodeType
     data: bytes
 
+class GM67ChecksummedReader:
+    port: Serial
+    checksum_state: int
+
+    def __init__(self, port: Serial):
+        self.port = port
+        self.checksum_state = 0
+
+    def read(self, length: int, /, checksum: bool = True) -> bytes:
+        res = self.port.read(length)
+        if len(res) != length:
+            raise TimeoutError("Timeout reading %d bytes" % length)
+        if checksum:
+            for b in res:
+                self.checksum_state -= b
+        return res
+
+    def checksum(self) -> int:
+        return self.checksum_state & 0xFFFF
+
 class GM67:
     port: Serial
 
@@ -93,12 +113,6 @@ class GM67:
         for b in data:
             csum -= b
         return csum & 0xFFFF
-    
-    def _ensure_read(self, length: int) -> bytes:
-        res = self.port.read(length)
-        if len(res) != length:
-            raise TimeoutError("Timeout reading %d bytes" % length)
-        return res
     
     def poll(self) -> bytes | None:
         try:
@@ -139,25 +153,25 @@ class GM67:
         # n bytes: data
         # 2 bytes: checksum
 
-        pkthdrtmp = self._ensure_read(2)
-        pktdata_raw = pkthdrtmp
-        pktlen = pkthdrtmp[0]
-        opcode = pkthdrtmp[1]
+        reader = GM67ChecksummedReader(self.port)
+
+        pkttmp = reader.read(2)
+        pktlen = pkttmp[0]
+        opcode = pkttmp[1]
         if pktlen == 0xFF and opcode in MULTIBYTE_OPCODES:
-            pkthdrtmp = self._ensure_read(3) # 2-byte length
-            if pkthdrtmp[2] != opcode:
+            pkttmp = reader.read(3) # 2-byte length
+            if pkttmp[2] != opcode:
                 raise ValueError("Unexpected opcode mismatch in multi-byte length packet: First=%02x / Second=%02x" % (opcode, pktdata[0]))
-            pktdata_raw += pkthdrtmp
-            pktdata = self._ensure_read(int.from_bytes(pkthdrtmp[:2], "big") - 3)
+            pktdata = reader.read(int.from_bytes(pkttmp[:2], "big") - 5)
         else:
-            pktdata = self._ensure_read(pktlen)
+            pktdata = reader.read(pktlen - 2)
 
-        pktcsum = (pktdata[-2] << 8) | pktdata[-1]
-        pktdata = pktdata[:-2]
-        pktdata_raw += pktdata
+        pkttmp = reader.read(2, checksum=False)
+        pktcsum = (pkttmp[-2] << 8) | pkttmp[-1]
 
-        if pktcsum != GM67.compute_checksum(pktdata_raw):
-            raise ValueError("Checksum mismatch: Computed=%04x / Packet=%04x" % (GM67.compute_checksum(pktdata), pktcsum))
+        computed_csum = reader.checksum()
+        if pktcsum != computed_csum:
+            raise ValueError("Checksum mismatch: Computed=%04x / Packet=%04x" % (computed_csum, pktcsum))
 
         return bytes([opcode]) + pktdata
 
