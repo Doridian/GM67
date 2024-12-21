@@ -91,7 +91,7 @@ class GM67:
         s = 0
         for b in data:
             s += b
-        return 0x10000 - s
+        return 0x10000 - (s & 0xFFFF)
     
     def _ensure_read(self, length: int) -> bytes:
         res = self.port.read(length)
