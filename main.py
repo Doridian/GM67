@@ -88,6 +88,7 @@ class GM67:
 
     @staticmethod
     def compute_checksum(data: bytes) -> int:
+        # The real FW likely just uses a uint16_t and wraps around
         csum = 0
         for b in data:
             csum -= b
