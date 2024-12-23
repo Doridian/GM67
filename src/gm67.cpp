@@ -34,11 +34,11 @@ int GM67::send_command(const uint8_t opcode, const uint8_t* payload, const int p
     return this->raw_send_command(opcode, payload, payload_len, true);
 }
 
-static bool is_multibyte_opcode(const GM67Opcode opcode) {
+static inline bool is_multibyte_opcode(const GM67Opcode opcode) {
     return opcode == GM67Opcode::SCAN_LONG;
 }
 
-static uint16_t parse_uint16(const uint8_t* buf) {
+static inline uint16_t parse_uint16(const uint8_t* buf) {
     return (buf[0] << 8) | buf[1];
 }
 
