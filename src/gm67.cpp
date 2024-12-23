@@ -11,12 +11,12 @@ static constexpr uint8_t NACK_TO_DEVICE_RESEND[ACK_NACK_SIZE] = { 0x04, 0x00 };
 
 // #define GM67_SERIAL_DEBUG Serial
 
-#define SAFE_READ_TO_BUFFER(length, buf) \
+#define SAFE_READ_TO_BUF(length, buf) \
     if (this->read_raw(length, buf) != length) { \
         return nullptr; \
     }
 
-#define SAFE_WRITE_FROM_BUFFER(length, buf) \
+#define SAFE_WRITE_FROM_BUF(length, buf) \
     if (this->write_raw(length, buf) != length) { \
         return 0; \
     }
@@ -47,7 +47,7 @@ int GM67::write_uint16(const uint16_t value) {
         (uint8_t)((value >> 8) & 0xFF),
         (uint8_t)(value & 0xFF),
     };
-    SAFE_WRITE_FROM_BUFFER(2, buf);
+    SAFE_WRITE_FROM_BUF(2, buf);
     return 2;
 }
 
@@ -75,12 +75,12 @@ const GM67Response* GM67::read() {
 
     uint8_t tmp_buf[4]; // We only read 2 or 3 bytes into this, but I like even numbers
 
-    SAFE_READ_TO_BUFFER(2, tmp_buf);
+    SAFE_READ_TO_BUF(2, tmp_buf);
     int pktlen = tmp_buf[0];
     GM67Opcode opcode = (GM67Opcode)tmp_buf[1];
 
     if (pktlen == 0xFF && is_multibyte_opcode(opcode)) {
-        SAFE_READ_TO_BUFFER(3, tmp_buf); // 2-byte length
+        SAFE_READ_TO_BUF(3, tmp_buf); // 2-byte length
         if (tmp_buf[2] != opcode) {
 #ifdef GM67_SERIAL_DEBUG
             GM67_SERIAL_DEBUG.print("Multibyte opcode mismatch. Outer=");
@@ -95,14 +95,14 @@ const GM67Response* GM67::read() {
     } else {
         pktlen -= 2;
     }
-    SAFE_READ_TO_BUFFER(pktlen, &this->last_response.data[0]);
+    SAFE_READ_TO_BUF(pktlen, &this->last_response.data[0]);
     this->last_response.length = pktlen;
     this->last_response.opcode = opcode;
 
     // Grab checksum before we add the checksum to the checksum etc
     uint16_t computed_csum = this->checksum_state;
 
-    SAFE_READ_TO_BUFFER(2, tmp_buf);
+    SAFE_READ_TO_BUF(2, tmp_buf);
     uint16_t packet_csum = parse_uint16(&tmp_buf[0]);
 
     if (packet_csum != computed_csum) {
@@ -133,8 +133,8 @@ int GM67::assert_ack() {
     return 0;
 }
 
-int GM67::read_raw(const int length, uint8_t *buffer) {
-    int read = serial.readBytes(buffer, length);
+int GM67::read_raw(const int length, uint8_t *buf) {
+    int read = serial.readBytes(buf, length);
     if (read != length) {
 #ifdef GM67_SERIAL_DEBUG
         GM67_SERIAL_DEBUG.print("Read mismatch: Expected=");
@@ -143,7 +143,7 @@ int GM67::read_raw(const int length, uint8_t *buffer) {
         GM67_SERIAL_DEBUG.print(read);
         GM67_SERIAL_DEBUG.print(" / Data=");
         for (int i = 0; i < read; i++) {
-            GM67_SERIAL_DEBUG.print(buffer[i], HEX);
+            GM67_SERIAL_DEBUG.print(buf[i], HEX);
             GM67_SERIAL_DEBUG.print(" ");
         }
         GM67_SERIAL_DEBUG.println();
@@ -152,13 +152,13 @@ int GM67::read_raw(const int length, uint8_t *buffer) {
     }
 
     for (int i = 0; i < length; i++) {
-        this->checksum_state -= buffer[i];
+        this->checksum_state -= buf[i];
     }
 
 #ifdef GM67_SERIAL_DEBUG
     GM67_SERIAL_DEBUG.print("Read data: ");
     for (int i = 0; i < length; i++) {
-        GM67_SERIAL_DEBUG.print(buffer[i], HEX);
+        GM67_SERIAL_DEBUG.print(buf[i], HEX);
         GM67_SERIAL_DEBUG.print(" ");
     }
     GM67_SERIAL_DEBUG.println();
@@ -167,8 +167,8 @@ int GM67::read_raw(const int length, uint8_t *buffer) {
     return length;
 }
 
-int GM67::write_raw(const int length, const uint8_t *buffer) {
-    int written = serial.write(buffer, length);
+int GM67::write_raw(const int length, const uint8_t *buf) {
+    int written = serial.write(buf, length);
     if (written != length) {
 #ifdef GM67_SERIAL_DEBUG
         GM67_SERIAL_DEBUG.print("Write mismatch: Expected=");
@@ -177,7 +177,7 @@ int GM67::write_raw(const int length, const uint8_t *buffer) {
         GM67_SERIAL_DEBUG.print(written);
         GM67_SERIAL_DEBUG.print(" / Data=");
         for (int i = 0; i < written; i++) {
-            GM67_SERIAL_DEBUG.print(buffer[i], HEX);
+            GM67_SERIAL_DEBUG.print(buf[i], HEX);
             GM67_SERIAL_DEBUG.print(" ");
         }
         GM67_SERIAL_DEBUG.println();
@@ -185,13 +185,13 @@ int GM67::write_raw(const int length, const uint8_t *buffer) {
         return 0;
     }
     for (int i = 0; i < length; i++) {
-        this->checksum_state -= buffer[i];
+        this->checksum_state -= buf[i];
     }
 
 #ifdef GM67_SERIAL_DEBUG
     GM67_SERIAL_DEBUG.print("Written data: ");
     for (int i = 0; i < length; i++) {
-        GM67_SERIAL_DEBUG.print(buffer[i], HEX);
+        GM67_SERIAL_DEBUG.print(buf[i], HEX);
         GM67_SERIAL_DEBUG.print(" ");
     }
     GM67_SERIAL_DEBUG.println();
@@ -211,9 +211,9 @@ int GM67::raw_send_command(const uint8_t opcode, const uint8_t* payload, const i
     }
     const uint8_t command_len = 2 + payload_len;
     this->checksum_state = 0;
-    SAFE_WRITE_FROM_BUFFER(1, &command_len);
-    SAFE_WRITE_FROM_BUFFER(1, &opcode);
-    SAFE_WRITE_FROM_BUFFER(payload_len, payload);
+    SAFE_WRITE_FROM_BUF(1, &command_len);
+    SAFE_WRITE_FROM_BUF(1, &opcode);
+    SAFE_WRITE_FROM_BUF(payload_len, payload);
     if (this->write_uint16(this->checksum_state) != 2) {
         return 0;
     }
