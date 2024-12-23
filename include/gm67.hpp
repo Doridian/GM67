@@ -47,8 +47,8 @@ protected:
     const GM67Response* read();
     int write_uint16(const uint16_t value);
     int assert_ack();
-    int read_raw(const int length, uint8_t *buffer);
-    int write_raw(const int length, const uint8_t *buffer);
+    int read_raw(const int length, uint8_t *buf);
+    int write_raw(const int length, const uint8_t *buf);
     int raw_send_command(const uint8_t opcode, const uint8_t* payload, const int payload_len, const bool expect_ack);
 
 private:
