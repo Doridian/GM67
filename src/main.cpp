@@ -18,13 +18,13 @@ void loop() {
     Serial.println("Trigger mode set to HOST");
   }
 
-  const GM67Response* buf = gm67.poll();
-  if (buf != nullptr) {
+  const GM67Response* resp = gm67.poll();
+  if (resp != nullptr) {
     Serial.print("Read: Op: ");
-    Serial.print(buf->opcode, HEX);
+    Serial.print(resp->opcode, HEX);
     Serial.print(" Data: ");
-    for (int i = 0; i < buf->length; i++) {
-      Serial.print(buf->data[i], HEX);
+    for (int i = 0; i < resp->length; i++) {
+      Serial.print(resp->data[i], HEX);
       Serial.print(" ");
     }
     Serial.println();
