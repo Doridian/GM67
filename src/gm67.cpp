@@ -79,12 +79,8 @@ GM67Barcode* GM67::scan(const unsigned long timeout_ms) {
         return nullptr;
     }
 
+    // Clearly, we didn't get a poll from a scan, so drop it on the floor
     if (resp->opcode != GM67Opcode::SCAN_LONG && resp->opcode != GM67Opcode::SCAN_SHORT) {
-        free(resp);
-        return nullptr;
-    }
-
-    if (resp->data[0] != 0x00 || resp->data[1] != 0x00) {
         free(resp);
         return nullptr;
     }
@@ -95,6 +91,10 @@ GM67Barcode* GM67::scan(const unsigned long timeout_ms) {
     barcode->data = ((uint8_t*)barcode) + sizeof(GM67Barcode);
     barcode->barcode_type = (GM67BarcodeType)resp->data[2];
     barcode->length = length;
+    // For all known codes, these two are always 0. Maybe this is for the partial scan detection?
+    // Not sure, for now we'll just copy them over
+    barcode->unknown[0] = resp->data[0];
+    barcode->unknown[1] = resp->data[1];
     memcpy(barcode->data, &resp->data[3], length);
 
     free(resp);

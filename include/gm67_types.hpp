@@ -74,6 +74,7 @@ enum GM67BarcodeType {
 };
 
 typedef struct GM67Barcode {
+    uint8_t unknown[2];
     GM67BarcodeType barcode_type;
     uint8_t length;
     uint8_t* data;

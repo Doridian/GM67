@@ -22,6 +22,10 @@ void loop() {
   if (resp != nullptr) {
     Serial.print("Read: Type: ");
     Serial.print(resp->barcode_type, HEX);
+    Serial.print(" Unknown: ");
+    Serial.print(resp->unknown[0], HEX);
+    Serial.print(" ");
+    Serial.print(resp->unknown[1], HEX);
     Serial.print(" Data: ");
     for (int i = 0; i < resp->length; i++) {
       Serial.print(resp->data[i], HEX);
