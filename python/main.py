@@ -202,10 +202,10 @@ class GM67:
         self.send_command(b"\xC6\x04\x08\x00\xEE" + (b"\x01" if enable else b"\x00"))
 
     def set_scan_enable(self, enable: bool) -> None:
-        self.send_command(b"\xE9\x04\x00\xFF\x0F" if enable else b"\x04\xEA\x04\x00")
+        self.send_command(b"\xE9\x04\x00" if enable else b"\xEA\x04\x00")
 
     def set_scanner_active(self, active: bool) -> None:
-        self.send_command(b"\xE4\x04\x00\xFF\x14" if active else b"\x04\xE5\x04\x00")
+        self.send_command(b"\xE4\x04\x00" if active else b"\xE5\x04\x00")
 
 def main():
     port = Serial(argv[1], baudrate=115200, timeout=0.2)

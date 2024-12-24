@@ -25,6 +25,10 @@ enum GM67Opcode {
     ACK = 0xD0,
     NACK = 0xD1,
     CONFIGURE = 0xC6,
+    START_SCAN = 0xE4,
+    STOP_SCAN = 0xE5,
+    ENABLE_SCANNER = 0xE9,
+    DISABLE_SCANNER = 0xEA,
     SCAN_SHORT = 0xF3,
     SCAN_LONG = 0xF4,
 };
@@ -74,14 +78,15 @@ enum GM67BarcodeType {
 };
 
 typedef struct GM67Barcode {
-    uint8_t unknown[2];
     GM67BarcodeType barcode_type;
     uint8_t length;
     uint8_t* data;
 } GM67Barcode;
 
-typedef struct GM67Response {
+typedef struct GM67Payload {
     GM67Opcode opcode;
+    uint8_t target;
+    uint8_t unknown;
     uint8_t length;
     uint8_t* data;
-} GM67Response;
+} GM67Payload;
