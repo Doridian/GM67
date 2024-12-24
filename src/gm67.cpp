@@ -51,21 +51,59 @@ int GM67::write_uint16(const uint16_t value) {
     return 2;
 }
 
-const GM67Response* GM67::poll() {
-    if (serial.available()) {
-        const GM67Response* res = this->read();
-        if (res == nullptr) {
+GM67Response* GM67::poll(const unsigned long timeout_ms) {
+    if (serial.available() || timeout_ms > 0) {
+        const unsigned long timeout_old = this->serial.getTimeout();
+        if (timeout_ms > 0) {
+            this->serial.setTimeout(timeout_ms);
+        }
+        GM67Response* resp = this->read();
+        if (timeout_ms > 0) {
+            this->serial.setTimeout(timeout_old);
+        }
+
+        if (resp == nullptr) {
             this->send_nack_resend();
         } else {
             this->send_ack();
         }
-        return res;
+        return resp;
     }
     return nullptr;
 }
 
+GM67Barcode* GM67::scan(const unsigned long timeout_ms) {
+    // TODO: Turn on scanner
+    GM67Response* resp = this->poll(timeout_ms);
+    if (resp == nullptr) {
+        return nullptr;
+    }
+
+    if (resp->opcode != GM67Opcode::SCAN_LONG && resp->opcode != GM67Opcode::SCAN_SHORT) {
+        free(resp);
+        return nullptr;
+    }
+
+    if (resp->data[0] != 0x00 || resp->data[1] != 0x00) {
+        free(resp);
+        return nullptr;
+    }
+
+    const int length = resp->length - 1;
+    // How do we make this a single allocation? That's right, we're gonna cheat here, too!
+    GM67Barcode* barcode = (GM67Barcode*)malloc(sizeof(GM67Barcode) + length);
+    barcode->data = ((uint8_t*)barcode) + sizeof(GM67Barcode);
+    barcode->barcode_type = (GM67BarcodeType)resp->data[2];
+    barcode->length = length;
+    memcpy(barcode->data, &resp->data[3], length);
+
+    free(resp);
+
+    return barcode;
+}
+
 // Do NOT free the return value of this!
-const GM67Response* GM67::read() {
+GM67Response* GM67::read() {
     // Packet structure:
     // 1 byte: length of packet (including length, excluding checksum)
     // n bytes: data
@@ -95,9 +133,14 @@ const GM67Response* GM67::read() {
     } else {
         pktlen -= 2;
     }
-    SAFE_READ_TO_BUF(pktlen, &this->last_response.data[0]);
-    this->last_response.length = pktlen;
-    this->last_response.opcode = opcode;
+
+    // How do we make this a single allocation? That's right, we're gonna cheat!
+    GM67Response *resp = (GM67Response*)malloc(sizeof(GM67Response) + pktlen);
+    resp->data = ((uint8_t*)resp) + sizeof(GM67Response);
+
+    SAFE_READ_TO_BUF(pktlen, &resp->data[0]);
+    resp->length = pktlen;
+    resp->opcode = opcode;
 
     // Grab checksum before we add the checksum to the checksum etc
     uint16_t computed_csum = this->checksum_state;
@@ -116,21 +159,18 @@ const GM67Response* GM67::read() {
         return nullptr;
     }
 
-    return &this->last_response;
+    return resp;
 }
 
 int GM67::assert_ack() {
-    const GM67Response* buf = this->read();
-    if (buf == nullptr) {
+    GM67Response* resp = this->read();
+    if (resp == nullptr) {
         return 0;
     }
-    if (memcmp(buf->data, ACK_FROM_DEVICE, ACK_NACK_SIZE) != 0) {
-#ifdef GM67_SERIAL_DEBUG
-        GM67_SERIAL_DEBUG.println("ACK mismatch");
-#endif
-        return 1;
-    }
-    return 0;
+
+    int cmpres = memcmp(resp->data, ACK_FROM_DEVICE, ACK_NACK_SIZE);
+    free(resp);
+    return cmpres;
 }
 
 int GM67::read_raw(const int length, uint8_t *buf) {
@@ -145,7 +185,7 @@ int GM67::read_raw(const int length, uint8_t *buf) {
         for (int i = 0; i < read; i++) {
             GM67_SERIAL_DEBUG.print(buf[i], HEX);
             GM67_SERIAL_DEBUG.print(" ");
-        }
+            }
         GM67_SERIAL_DEBUG.println();
 #endif
         return 0;

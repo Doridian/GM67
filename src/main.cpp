@@ -18,15 +18,16 @@ void loop() {
     Serial.println("Trigger mode set to HOST");
   }
 
-  const GM67Response* resp = gm67.poll();
+  GM67Barcode* resp = gm67.scan(1000);
   if (resp != nullptr) {
-    Serial.print("Read: Op: ");
-    Serial.print(resp->opcode, HEX);
+    Serial.print("Read: Type: ");
+    Serial.print(resp->barcode_type, HEX);
     Serial.print(" Data: ");
     for (int i = 0; i < resp->length; i++) {
       Serial.print(resp->data[i], HEX);
       Serial.print(" ");
     }
     Serial.println();
+    free(resp);
   }
 }
