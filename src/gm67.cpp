@@ -58,24 +58,25 @@ int GM67::write_uint16(const uint16_t value) {
 }
 
 GM67Payload* GM67::poll(const int timeout_ms) {
-    if (serial.available() || timeout_ms > 0) {
-        const unsigned long timeout_old = this->serial.getTimeout();
-        if (timeout_ms > 0) {
-            this->serial.setTimeout(timeout_ms);
-        }
-        GM67Payload* resp = this->read();
-        if (timeout_ms > 0) {
-            this->serial.setTimeout(timeout_old);
-        }
-
-        if (resp == nullptr) {
-            this->send_nack_resend();
-        } else {
-            this->send_ack();
-        }
-        return resp;
+    if (!serial.available() && timeout_ms <= 0) {
+        return nullptr;
     }
-    return nullptr;
+
+    const unsigned long timeout_old = this->serial.getTimeout();
+    if (timeout_ms > 0) {
+        this->serial.setTimeout(timeout_ms);
+    }
+    GM67Payload* resp = this->read();
+    if (timeout_ms > 0) {
+        this->serial.setTimeout(timeout_old);
+    }
+
+    if (resp == nullptr) {
+        this->send_nack_resend();
+    } else {
+        this->send_ack();
+    }
+    return resp;
 }
 
 GM67Barcode* GM67::scan(const int timeout_ms) {
